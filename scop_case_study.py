@@ -678,6 +678,10 @@ def run_case_study(scop_records: List[DomainRecord], output_dir: str, sizes: Dic
             if fams:
                 challenging_families = fams
                 break
+    # Fallback: if still no challenging families, select top families globally
+    if not challenging_families:
+        fam_groups = by_family  # all families
+        challenging_families = find_top_categories(fam_groups, num=4, min_domains=sizes['challenging'])
     # Summary of chosen categories
     selection = {
         'easy': easy_classes,
