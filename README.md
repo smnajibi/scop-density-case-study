@@ -1,7 +1,7 @@
 # SCOP Density Case Study
 
 This repository contains Python code to assemble benchmarking datasets
-for evaluating algorithms that estimate Ramachandran‐plot densities on
+for evaluating algorithms that estimate Ramachandran‑plot densities on
 the surface of a sphere.  The central idea is to select protein domains
 from different parts of the SCOP hierarchical classification and
 compare how an algorithm performs when the training data are
@@ -21,8 +21,8 @@ into the appropriate directories before running the script.
 
 The Structural Classification of Proteins (SCOP) groups protein
 domains into a hierarchy based on structural and evolutionary
-relationships.  At the top of the tree are **classes** (all‐α,
-all‐β, α/β etc.), followed by **folds**, **superfamilies** and
+relationships.  At the top of the tree are **classes** (all‑α,
+all‑β, α/β etc.), followed by **folds**, **superfamilies** and
 **families**.  Classes roughly reflect secondary structure content,
 while deeper levels capture increasingly close evolutionary
 relationships【947083788190719†L235-L303】.  The SCOP release 1.75 is the
@@ -35,14 +35,14 @@ file to infer the classification of each domain.
 1. **Classification parsing:** The script reads the SCOP
    classification file (`dir.cla.scop.1.75.txt`) and extracts for each
    domain the **SCOP concise classification string** (sccs) and the
-   associated 4‐letter PDB code.  Only domains belonging to true
+   associated 4‑letter PDB code.  Only domains belonging to true
    structural classes (`a` through `g`) are retained【947083788190719†L246-L257】.
 
 2. **Category selection:** For each difficulty level the code
    identifies suitable SCOP categories:
 
    - **Easy:** four distinct classes with the largest numbers of
-     available domains (for example, all‐α, all‐β, α/β (parallel) and
+     available domains (for example, all‑α, all‑β, α/β (parallel) and
      α+β (antiparallel))【947083788190719†L235-L245】.
    - **Moderate:** four folds from different classes.  The folds with
      the most unique PDB entries are chosen.
@@ -69,14 +69,49 @@ file to infer the classification of each domain.
    containing the angles for all sampled structures is written, along
    with a `meta.txt` listing the selected SCOP categories.
 
-## Installation and prerequisites
+## Installation
 
-The script is intentionally lightweight and depends only on the Python
-standard library.  It runs under Python 3.7 or later.  To obtain the
-SCOP classification file you need network access, or you can download
-`dir.cla.scop.1.75.txt` from the SCOPe server and place it into the
-`scop_data/` directory.  The PDB files are downloaded from the RCSB
-archive.
+The code has **no third‑party dependencies**—it relies solely on
+Python’s standard library—so installation is straightforward.  It runs
+on Python 3.7 or later.  We still provide a `requirements.txt` file to
+simplify environment setup and to act as a placeholder should future
+enhancements add optional dependencies.  To get started:
+
+1. **Clone the repository** (or download it as a ZIP) and navigate into
+   the project directory.
+
+2. **(Optional) Create and activate a virtual environment** to keep the
+   installation isolated:
+
+   ```bash
+   python3 -m venv venv
+   # On Linux/macOS
+   source venv/bin/activate
+   # On Windows
+   # venv\Scripts\activate
+   ```
+
+3. **Install dependencies** using `pip`:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+   The `requirements.txt` file is empty because the script uses only
+   the standard library, but running the command ensures your toolchain
+   is set up correctly and provides a placeholder for future additions.
+
+4. **Prepare data:** Ensure the SCOP classification file
+   `dir.cla.scop.1.75.txt` is available.  The script will attempt to
+   download it automatically into the `scop_data/` directory, but you
+   can also download it manually from the SCOPe server and place it
+   into that directory to avoid network issues.  Likewise, PDB files
+   are fetched from the RCSB archive on demand, but pre‑downloading
+   them into the output directory will skip the download step.
+
+5. **Run the script** following the example in the
+   [Workflow overview](#overview-of-the-workflow) section, adjusting
+   arguments such as `--output-dir` and the sample sizes as needed.
 
 ## Running the case study generation
 
