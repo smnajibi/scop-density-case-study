@@ -1,0 +1,3 @@
+# This project intentionally has no third‑party dependencies.
+# Installing an empty requirements file is still useful for
+# reproducible setups and can be a placeholder for future additions.
