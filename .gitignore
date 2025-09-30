@@ -1,0 +1,6 @@
+# Ignore SCOP classification and other data
+#scop_data/
+
+# Ignore downloaded PDB files stored under each difficulty level
+results/*/structures/
+
