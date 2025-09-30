@@ -348,7 +348,14 @@ def sample_domains(records: List[DomainRecord], category_code: str, level: int, 
         A list of domain records corresponding to the sampled PDB entries.
     """
     rng = random.Random(seed)
-    prefix = category_code + ('' if category_code.endswith('.') else '.')
+    # Determine the matching prefix.  For levels 1–3 (class, fold, superfamily)
+    # we append a trailing dot to ensure only exact prefixes are matched
+    # (e.g. 'a.1.' matches 'a.1.2', but not 'a.10').  For level 4 (family)
+    # the full code should match exactly, so no dot is appended.
+    if level < 4:
+        prefix = category_code + '.'
+    else:
+        prefix = category_code
     # Filter records whose sccs starts with the prefix
     selected = [rec for rec in records if rec.sccs.startswith(prefix)]
     # Group by PDB accession

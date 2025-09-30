@@ -1,0 +1,5 @@
+Selected categories for easy:
+  c
+  b
+  d
+  a

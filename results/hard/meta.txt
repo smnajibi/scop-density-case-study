@@ -1,0 +1,3 @@
+Selected categories for hard:
+  c.1.8
+  c.1.10
