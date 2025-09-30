@@ -213,14 +213,24 @@ def parse_scop_classfile(filename: str) -> List[DomainRecord]:
             # Format: sid sunid sccs residue_range
             # e.g. d1tpt_ 14919 a.1.1.2 (1-70) ...
             # Some engineered entries start with 'g' or 'd', keep all for now
-            try:
-                sid = parts[0]
-                sunid = parts[1]  # unused currently
-                sccs = parts[2]
-            except IndexError:
+            # The parseable classification files may have either three or four
+            # whitespace‑separated fields before the numerical sunid/indices.  In
+            # older releases the fields are: sid, sunid, sccs, residue_range.  In
+            # SCOP 1.75 the third column encodes the chain (e.g. "A:") and the
+            # classification string (sccs) moves to the fourth column.  Robustly
+            # extract the sccs by checking for a trailing colon in parts[2].
+            if len(parts) < 3:
                 continue
+            sid = parts[0]
+            # Determine which element contains the sccs.  If the third part ends
+            # with a colon (e.g. "A:" or "-"), assume the classification string
+            # is the fourth element; otherwise use the third element.
+            if len(parts) > 3 and parts[2].endswith(":"):
+                sccs = parts[3]
+            else:
+                sccs = parts[2]
             # We only care about domains belonging to classes a–g (true structural classes)
-            class_letter = sccs.split('.')[0]
+            class_letter = sccs.split('.')[0].lower()
             if class_letter not in {"a", "b", "c", "d", "e", "f", "g"}:
                 continue
             pdb_id = sid[1:5].lower()  # skip the initial 'd' and make lower case
