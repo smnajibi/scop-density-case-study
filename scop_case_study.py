@@ -305,7 +305,17 @@ def find_top_categories(groups: Dict[str, List[DomainRecord]], num: int, min_dom
             counts.append((key, count))
     # Sort by descending count
     counts.sort(key=lambda x: (-x[1], x[0]))
-    return [key for key, _ in counts[:num]]
+    if counts:
+        return [key for key, _ in counts[:num]]
+    # Fallback: if no categories meet the minimum domain threshold, relax the
+    # requirement and return the top categories regardless of size.  This
+    # prevents missing datasets when only smaller categories are available.
+    all_counts = [
+        (key, len({r.pdb for r in recs}))
+        for key, recs in groups.items()
+    ]
+    all_counts.sort(key=lambda x: (-x[1], x[0]))
+    return [key for key, _ in all_counts[:num]]
 
 
 def sample_domains(records: List[DomainRecord], category_code: str, level: int, max_per_cat: int, seed: Optional[int] = None) -> List[DomainRecord]:
@@ -542,45 +552,60 @@ def torsion_angle(p1, p2, p3, p4) -> float:
     return phi
 
 
-def compute_angles_for_structure(backbone: List[Tuple[str, int, Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]]) -> List[Dict[str, object]]:
-    """Given a list of backbone atoms, compute τ/θ, φ and ψ angles for each residue.
+def compute_angles_for_structure(
+    backbone: List[Tuple[str, int, Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]]
+) -> List[Dict[str, object]]:
+    """Given a list of backbone atoms, compute the Cα–Cα–Cα pseudo bond angle (θ) and
+    the Cα–Cα–Cα–Cα pseudo dihedral angle (τ) for each residue.
+
+    The **theta** angle is computed for residue *i* as the angle between the
+    vectors defined by Cα_{i‑1}→Cα_i and Cα_{i+1}→Cα_i.  The **tau** angle is
+    computed as the dihedral angle between the planes formed by
+    (Cα_{i‑1}, Cα_i, Cα_{i+1}) and (Cα_i, Cα_{i+1}, Cα_{i+2}); this represents
+    the torsion about the central Cα–Cα bond.  At chain termini where the
+    required neighbouring residues are missing, ``nan`` values are returned.
 
     Parameters
     ----------
     backbone : list
-        Output of :func:`parse_pdb_backbone`.
+        Output of :func:`parse_pdb_backbone` consisting of tuples
+        (res_name, res_seq, N, CA, C) for each residue.
 
     Returns
     -------
     list of dict
-        Each dictionary contains the residue name (res_name), sequence number
-        (res_seq) and the computed angles (tau, phi, psi).  The first and
-        last residues in a chain will have ``nan`` torsion angles.
+        Each dictionary contains the residue name (``res_name``), sequence number
+        (``res_seq``) and the computed angles (``theta`` and ``tau``).  The
+        first two and last two residues in a chain will have ``nan`` torsion
+        values as there are insufficient Cα neighbours to compute the angle.
     """
-    results = []
+    results: List[Dict[str, object]] = []
     n = len(backbone)
-    for i, (res_name, res_seq, N_i, CA_i, C_i) in enumerate(backbone):
-        # τ/θ angle at Cα: between vectors N_i→CA_i and C_i→CA_i
-        v1 = vector(N_i, CA_i)
-        v2 = vector(C_i, CA_i)
-        tau_angle = angle_between(v1, v2)
-        # Initialize torsions
-        phi = float('nan')
-        psi = float('nan')
-        # φ: C_{i‑1}, N_i, CA_i, C_i
-        if i > 0:
-            prev_C = backbone[i - 1][4]
-            phi = torsion_angle(prev_C, N_i, CA_i, C_i)
-        # ψ: N_i, CA_i, C_i, N_{i+1}
-        if i < n - 1:
-            next_N = backbone[i + 1][2]
-            psi = torsion_angle(N_i, CA_i, C_i, next_N)
+    # Extract Cα coordinates for convenience
+    ca_coords = [rec[3] for rec in backbone]
+    for i, (res_name, res_seq, _, CA_i, _) in enumerate(backbone):
+        # Initialize as NaN by default
+        theta_val = float('nan')
+        tau_val = float('nan')
+        # Compute θ (pseudo bond angle) if neighbours exist
+        if 0 < i < n - 1:
+            prev_ca = ca_coords[i - 1]
+            next_ca = ca_coords[i + 1]
+            v1 = vector(prev_ca, CA_i)
+            v2 = vector(next_ca, CA_i)
+            theta_val = angle_between(v1, v2)
+        # Compute τ (pseudo dihedral) if four consecutive Cα are available
+        if i > 0 and i < n - 2:
+            p0 = ca_coords[i - 1]
+            p1 = CA_i
+            p2 = ca_coords[i + 1]
+            p3 = ca_coords[i + 2]
+            tau_val = torsion_angle(p0, p1, p2, p3)
         results.append({
             "res_name": res_name,
             "res_seq": res_seq,
-            "tau": tau_angle,
-            "phi": phi,
-            "psi": psi
+            "theta": theta_val,
+            "tau": tau_val
         })
     return results
 
@@ -643,12 +668,16 @@ def run_case_study(scop_records: List[DomainRecord], output_dir: str, sizes: Dic
         # Collect superfamilies belonging to this fold
         sf_groups = {k: v for k, v in by_superfamily.items() if k.startswith(fold_for_hard + '.')}
         hard_superfamilies = find_top_categories(sf_groups, num=4, min_domains=sizes['hard'])
-    # Challenging: pick four families from within the first selected superfamily
-    challenging_families = []
+    # Challenging: pick four families from within one of the selected superfamilies.
+    # Try each superfamily in turn until a set of families with enough unique PDB entries is found.
+    challenging_families: List[str] = []
     if hard_superfamilies:
-        sf_for_chal = hard_superfamilies[0]
-        fam_groups = {k: v for k, v in by_family.items() if k.startswith(sf_for_chal + '.')}
-        challenging_families = find_top_categories(fam_groups, num=4, min_domains=sizes['challenging'])
+        for sf_for_chal in hard_superfamilies:
+            fam_groups = {k: v for k, v in by_family.items() if k.startswith(sf_for_chal + '.')}
+            fams = find_top_categories(fam_groups, num=4, min_domains=sizes['challenging'])
+            if fams:
+                challenging_families = fams
+                break
     # Summary of chosen categories
     selection = {
         'easy': easy_classes,
@@ -675,7 +704,7 @@ def run_case_study(scop_records: List[DomainRecord], output_dir: str, sizes: Dic
             # Additional fields: class_letter and protein_name
             fieldnames = [
                 'pdb_id', 'protein_name', 'domain_id', 'class', 'category',
-                'res_name', 'res_seq', 'tau', 'phi', 'psi'
+                'res_name', 'res_seq', 'theta', 'tau'
             ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
@@ -700,9 +729,8 @@ def run_case_study(scop_records: List[DomainRecord], output_dir: str, sizes: Dic
                             'category': cat,
                             'res_name': angle['res_name'],
                             'res_seq': angle['res_seq'],
-                            'tau': angle['tau'],
-                            'phi': angle['phi'],
-                            'psi': angle['psi']
+                            'theta': angle['theta'],
+                            'tau': angle['tau']
                         })
 
 
