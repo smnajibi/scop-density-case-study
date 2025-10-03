@@ -305,17 +305,25 @@ def find_top_categories(groups: Dict[str, List[DomainRecord]], num: int, min_dom
             counts.append((key, count))
     # Sort by descending count
     counts.sort(key=lambda x: (-x[1], x[0]))
-    if counts:
-        return [key for key, _ in counts[:num]]
-    # Fallback: if no categories meet the minimum domain threshold, relax the
-    # requirement and return the top categories regardless of size.  This
-    # prevents missing datasets when only smaller categories are available.
+    # Prepare a sorted list of all categories by descending PDB count
     all_counts = [
         (key, len({r.pdb for r in recs}))
         for key, recs in groups.items()
     ]
     all_counts.sort(key=lambda x: (-x[1], x[0]))
-    return [key for key, _ in all_counts[:num]]
+    # If we have at least ``num`` categories meeting the min_domains threshold,
+    # return the top ones.
+    if len(counts) >= num:
+        return [key for key, _ in counts[:num]]
+    # Otherwise take all categories meeting the threshold, then fill up the
+    # remaining slots with the next best categories regardless of size.
+    selected = [key for key, _ in counts]
+    for key, _ in all_counts:
+        if len(selected) >= num:
+            break
+        if key not in selected:
+            selected.append(key)
+    return selected[:num]
 
 
 def sample_domains(records: List[DomainRecord], category_code: str, level: int, max_per_cat: int, seed: Optional[int] = None) -> List[DomainRecord]:
